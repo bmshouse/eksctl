@@ -11,15 +11,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/weaveworks/eksctl/pkg/git"
-
 	portforward "github.com/justinbarrick/go-k8s-portforward"
 	"github.com/kris-nova/logger"
 	"github.com/pkg/errors"
 	"github.com/riywo/loginshell"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/weaveworks/eksctl/pkg/git"
 	"github.com/weaveworks/eksctl/pkg/kubernetes"
+	"github.com/weaveworks/eksctl/pkg/utils/file"
 	fluxapi "github.com/weaveworks/flux/api/v6"
 	transport "github.com/weaveworks/flux/http"
 	"github.com/weaveworks/flux/http/client"
@@ -47,10 +47,11 @@ func Command(flagGrouping *cmdutils.FlagGrouping) *cobra.Command {
 }
 
 type installFluxOpts struct {
-	templateParams install.TemplateParameters
-	gitFluxPath    string
-	timeout        time.Duration
-	amend          bool
+	templateParams       install.TemplateParameters
+	gitFluxPath          string
+	gitPrivateSSHKeyPath string
+	timeout              time.Duration
+	amend                bool
 }
 
 func installFluxCmd(cmd *cmdutils.Cmd) {
@@ -83,6 +84,8 @@ func installFluxCmd(cmd *cmdutils.Cmd) {
 			"Email to use as Git committer")
 		fs.StringVar(&opts.gitFluxPath, "git-flux-subdir", "flux/",
 			"Directory within the Git repository where to commit the Flux manifests")
+		fs.StringVar(&opts.gitPrivateSSHKeyPath, "git-private-ssh-key-path", "",
+			"Optional path to the private SSH key to use with Git, e.g.: ~/.ssh/id_rsa")
 		fs.StringVar(&opts.templateParams.Namespace, "namespace", "flux",
 			"Cluster namespace where to install Flux")
 		fs.BoolVar(&opts.amend, "amend", false,
@@ -113,6 +116,9 @@ func newFluxInstaller(ctx context.Context, cmd *cmdutils.Cmd, opts *installFluxO
 	}
 	if opts.templateParams.GitEmail == "" {
 		return nil, fmt.Errorf("please supply a valid --git-email argument")
+	}
+	if opts.gitPrivateSSHKeyPath != "" && !file.Exists(opts.gitPrivateSSHKeyPath) {
+		return nil, fmt.Errorf("please supply a valid --git-private-ssh-key-path argument")
 	}
 
 	if err := cmdutils.NewMetadataLoader(cmd).Load(); err != nil {
@@ -148,7 +154,12 @@ func newFluxInstaller(ctx context.Context, cmd *cmdutils.Cmd, opts *installFluxO
 		return nil, errors.Errorf("cannot create Kubernetes client set: %s", err)
 	}
 
-	gitClient := git.NewGitClient(ctx, opts.templateParams.GitUser, opts.templateParams.GitEmail, opts.timeout)
+	gitClient := git.NewGitClient(ctx, git.ClientParams{
+		User:              opts.templateParams.GitUser,
+		Email:             opts.templateParams.GitEmail,
+		Timeout:           opts.timeout,
+		PrivateSSHKeyPath: opts.gitPrivateSSHKeyPath,
+	})
 	fi := &fluxInstaller{
 		opts:          opts,
 		cmd:           cmd,

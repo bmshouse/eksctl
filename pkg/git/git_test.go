@@ -1,13 +1,14 @@
 package git
 
 import (
+	"os"
+	"os/exec"
+	"strings"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	"github.com/weaveworks/eksctl/pkg/git/executor"
-	"os"
-	"os/exec"
-	"strings"
 )
 
 var _ = Describe("GitClient", func() {
@@ -20,7 +21,7 @@ var _ = Describe("GitClient", func() {
 
 	BeforeEach(func() {
 		fakeExecutor = new(executor.FakeExecutor)
-		gitClient = NewGitClientFromExecutor("test-user", "test-user@example.com", fakeExecutor)
+		gitClient = NewGitClientFromExecutor(fakeExecutor, "test-user", "test-user@example.com")
 	})
 
 	AfterEach(func() {

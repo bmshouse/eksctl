@@ -3,33 +3,42 @@ package git
 import (
 	"context"
 	"fmt"
-	"github.com/kris-nova/logger"
-	"github.com/weaveworks/eksctl/pkg/git/executor"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/kris-nova/logger"
+	"github.com/weaveworks/eksctl/pkg/git/executor"
 )
 
 // Client can perform git operations on the given directory
 type Client struct {
-	executor executor.Executor
-	dir      string
-	user     string
-	email    string
+	executor          executor.Executor
+	dir               string
+	user              string
+	email             string
+	privateSSHKeyPath string
+}
+
+// ClientParams groups the arguments to provide to create a new Git client.
+type ClientParams struct {
+	User              string
+	Email             string
+	Timeout           time.Duration
+	PrivateSSHKeyPath string
 }
 
 // NewGitClient returns a client that can perform git operations
-func NewGitClient(ctx context.Context, user string, email string, timeout time.Duration) *Client {
-	return &Client{
-		executor: executor.NewShellExecutor(ctx, timeout),
-		user:     user,
-		email:    email,
-	}
+func NewGitClient(ctx context.Context, params ClientParams) *Client {
+	return NewGitClientFromExecutor(
+		executor.NewShellExecutor(ctx, params.Timeout, params.PrivateSSHKeyPath),
+		params.User, params.Email,
+	)
 }
 
 // NewGitClientFromExecutor returns a client that can have an executor injected. Useful for testing
-func NewGitClientFromExecutor(user string, email string, executor executor.Executor) *Client {
+func NewGitClientFromExecutor(executor executor.Executor, user, email string) *Client {
 	return &Client{
 		executor: executor,
 		user:     user,
@@ -59,9 +68,9 @@ func (git Client) Add(files ...string) error {
 	return nil
 }
 
-// Commit  makes a commit if there are staged changes
+// Commit makes a commit if there are staged changes
 func (git Client) Commit(message string) error {
-	// Note, this useed to do runGitCmd(diffCtx, git.dir, "diff", "--cached", "--quiet", "--", fi.opts.gitFluxPath); err == nil {
+	// Note, this used to do runGitCmd(diffCtx, git.dir, "diff", "--cached", "--quiet", "--", fi.opts.gitFluxPath); err == nil {
 	if err := git.runGitCmd("diff", "--cached", "--quiet"); err == nil {
 		logger.Info("Nothing to commit (the repository contained identical files), moving on")
 		return nil
