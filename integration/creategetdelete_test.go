@@ -108,6 +108,44 @@ var _ = Describe("(Integration) Create, Get, Scale & Delete", func() {
 			})
 		})
 
+		Context("and configuring Flux for GitOps", func() {
+			It("should not return an error", func() {				
+				// Use a random branch to ensure test runs don't step on each others.
+				branch := random.String(8)
+				cloneDir, err := createBranch(branch)
+				Expect(err).ShouldNot(HaveOccurred())
+				defer deleteBranch(branch, cloneDir)
+
+				assertFluxManifestsAbsentInGit(branch)
+				assertFluxPodsAbsentInKubernetes()
+
+				eksctl := exec.Command("../../../eksctl", "install", "flux",
+					"--git-url", repository,
+					"--git-email", email,
+					"--git-private-ssh-key-path", privateSSHKeyPath,
+					"--git-branch", branch,
+					"--name", name,
+					"--region", region)
+				eksctl.Env = append(os.Environ(), "EKSCTL_EXPERIMENTAL=true", "AWS_PROFILE=default-mfa")
+				eksctl.Stdout = os.Stdout
+				eksctl.Stderr = os.Stderr
+				err = eksctl.Run()
+
+				assertFluxManifestsPresentInGit(branch)
+				assertFluxPodsPresentInKubernetes()
+
+				eksctlSuccessWith(params{
+					Args: []string{"install", "flux",
+						"--git-url", "git@github.com:eksctl-bot/my-gitops-repo.git",
+						"--git-email", "eksctl-bot@weave.works",
+						"--name", clusterName,
+						"--region", region,
+					},
+					Env: []string{"EKSCTL_EXPERIMENTAL=true"},
+				})
+			})
+		})
+
 		Context("and scale the initial nodegroup", func() {
 			It("should not return an error", func() {
 				eksctlSuccess("scale", "nodegroup",
